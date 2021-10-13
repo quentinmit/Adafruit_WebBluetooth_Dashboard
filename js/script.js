@@ -141,6 +141,17 @@ let panels = {
       }
     },
   },
+  voltage: {
+    serviceId: '00002b18-0000-1000-8000-00805f9b34fb',
+    characteristicId: '00002b18-0000-1000-8000-00805f9b34fb',
+    panelType: "graph",
+    structure: ['Uint16'],
+    data: {voltage:[]},
+    properties: ['notify'],
+    textFormat: function(value) {
+      return numeral(value/100).format('0.00') + ' V';
+    },
+  },
   temperature: {
     serviceId: '0100',
     characteristicId: '0101',
@@ -289,11 +300,19 @@ let panels = {
   neopixel: {
     serviceId: '0900',
     characteristicId: '0903',
-    panelType: "color",
+    panelType: "neopixel",
     structure: ['Uint16', 'Uint8', 'Uint8[]'],
     data: {R:[],G:[],B:[]},
     properties: ['write'],
   },
+    ulcolor: {
+        serviceId: '00000100-1fbd-c985-0843-2e5f29538d87',
+        characteristicId: '00000103-1fbd-c985-0843-2e5f29538d87',
+        panelType: 'color',
+        structure: ['Uint8', 'Uint8', 'Uint8', 'Uint8'],
+        data: {R:[],G:[],B:[],W:[]},
+      properties: ['read', 'write'],
+    },
   'model3d': {
     title: '3D Model',
     serviceId: '0d00',
@@ -733,6 +752,8 @@ function updatePanel(panelId) {
       updateTextPanel(panelId);
     } else if (panels[panelId].panelType == "graph") {
       updateGraphPanel(panelId);
+    } else if (panels[panelId].panelType == "color") {
+      updateColorPanel(panelId);
     } else if (panels[panelId].panelType == "model3d") {
       update3dPanel(panelId);
     } else if (panels[panelId].panelType == "custom") {
@@ -748,8 +769,10 @@ function createPanel(panelId) {
       createTextPanel(panelId);
     } else if (panels[panelId].panelType == "graph") {
       createGraphPanel(panelId);
+    } else if (panels[panelId].panelType == "neopixel") {
+        createNeopixelPanel(panelId);
     } else if (panels[panelId].panelType == "color") {
-      createColorPanel(panelId);
+        createColorPanel(panelId);
     } else if (panels[panelId].panelType == "model3d") {
       create3dPanel(panelId);
     } else if (panels[panelId].panelType == "custom") {
@@ -894,9 +917,9 @@ function updateGraphPanel(panelId) {
 }
 
 /* Color Panel */
-function createColorPanel(panelId) {
+function createNeopixelPanel(panelId) {
   // Create Panel from Template
-  let panelTemplate = loadPanelTemplate(panelId);
+  let panelTemplate = loadPanelTemplate(panelId, 'color');
 
   let container = panelTemplate.querySelector('.content div');
   panels[panelId].colorPicker = colorjoe.rgb(container, 'red');
@@ -932,6 +955,42 @@ function createColorPanel(panelId) {
   }
 
   panels[panelId].colorPicker.on('done', updateModelLed);
+}
+
+/* Color Panel */
+function createColorPanel(panelId) {
+  // Create Panel from Template
+  let panelTemplate = loadPanelTemplate(panelId);
+
+  let container = panelTemplate.querySelector('.content div');
+  panels[panelId].colorPicker = colorjoe.rgb(container, 'red', ['alpha']);
+
+  // Update the panel packet sequence to match the number of LEDs on board
+  panels[panelId].packetSequence = panels[panelId].structure;
+
+  // RGB Color Picker
+  function updateModelLed(color) {
+    let values = [Math.round(color.r() * 255),
+                  Math.round(color.g() * 255),
+                  Math.round(color.b() * 255),
+                  Math.round(color.alpha() * 255)];
+    let packet = encodePacket(panelId, values);
+    logMsg("Changing neopixel to " + Array.from(new Uint8Array(packet)).map(v => (v < 16 ? '0' : '') + v.toString(16), 2).join(''));
+    panels[panelId].characteristic.writeValue(packet)
+    .catch(error => {console.log(error);})
+    .then(_ => {});
+  }
+
+  panels[panelId].colorPicker.on('done', updateModelLed);
+}
+
+function updateColorPanel(panelId) {
+  let d = panels[panelId].data;
+  if (d.R.length < 1) {
+    return;
+  }
+  panels[panelId].colorPicker.set([d.R.pop(), d.G.pop(), d.B.pop(), d.W.pop()]);
+  //panels[panelId].colorPicker.set(panels[panelId].data);
 }
 
 /* 3D Panel */
